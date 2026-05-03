@@ -1,0 +1,79 @@
+{
+  "scenarios": [
+    {
+      "id": "gateway_failure_hdfc",
+      "name": "HDFC Gateway Failure",
+      "description": "Simulates complete failure of HDFC payment gateway",
+      "type": "gateway_failure",
+      "parameters": {
+        "gateway": "HDFC",
+        "duration_seconds": 300,
+        "failure_rate": 0.95,
+        "latency_multiplier": 5.0
+      },
+      "expected_alerts": ["P1", "P0"],
+      "runbook_url": "https://wiki.company.com/runbooks/gateway-failure"
+    },
+    {
+      "id": "latency_spike_all_gateways",
+      "name": "Global Latency Spike",
+      "description": "Simulates network issues causing latency across all gateways",
+      "type": "latency_spike",
+      "parameters": {
+        "duration_seconds": 180,
+        "spike_probability": 0.8,
+        "min_latency_ms": 2000,
+        "max_latency_ms": 8000
+      },
+      "expected_alerts": ["P2"],
+      "runbook_url": "https://wiki.company.com/runbooks/latency-spike"
+    },
+    {
+      "id": "success_rate_drop",
+      "name": "Success Rate Degradation",
+      "description": "Gradual decline in success rate across the platform",
+      "type": "success_drop",
+      "parameters": {
+        "duration_seconds": 600,
+        "failure_rate": 0.35,
+        "ramp_up_seconds": 120
+      },
+      "expected_alerts": ["P1", "P0"],
+      "runbook_url": "https://wiki.company.com/runbooks/success-rate-drop"
+    },
+    {
+      "id": "fraud_spike_merchant",
+      "name": "Fraud Spike for Specific Merchant",
+      "description": "Simulates fraud detection spike for a single merchant",
+      "type": "fraud_spike",
+      "parameters": {
+        "merchant_id": "merchant_001",
+        "duration_seconds": 120,
+        "fraud_rate": 0.4
+      },
+      "expected_alerts": ["P2"],
+      "runbook_url": "https://wiki.company.com/runbooks/fraud-detection"
+    },
+    {
+      "id": "cascading_gateway_failures",
+      "name": "Cascading Gateway Failures",
+      "description": "Multiple gateways failing in sequence (stress test)",
+      "type": "multi_scenario",
+      "parameters": {
+        "scenarios": [
+          {"type": "gateway_failure", "gateway": "HDFC", "delay_seconds": 0, "duration_seconds": 300},
+          {"type": "gateway_failure", "gateway": "ICICI", "delay_seconds": 60, "duration_seconds": 300},
+          {"type": "gateway_failure", "gateway": "SBI", "delay_seconds": 120, "duration_seconds": 300}
+        ]
+      },
+      "expected_alerts": ["P0"],
+      "runbook_url": "https://wiki.company.com/runbooks/cascading-failures"
+    }
+  ],
+  "automation": {
+    "enabled": true,
+    "schedule": "0 */4 * * *",
+    "notification_channel": "#chaos-testing",
+    "auto_cleanup": true
+  }
+}

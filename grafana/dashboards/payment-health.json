@@ -1,0 +1,177 @@
+{
+  "dashboard": {
+    "id": null,
+    "uid": "payment-health",
+    "title": "Payment Health Overview",
+    "tags": ["payments", "monitoring"],
+    "timezone": "browser",
+    "schemaVersion": 38,
+    "version": 1,
+    "refresh": "10s",
+    "panels": [
+      {
+        "id": 1,
+        "type": "gauge",
+        "title": "Success Rate %",
+        "gridPos": {"h": 8, "w": 6, "x": 0, "y": 0},
+        "targets": [
+          {
+            "datasource": {"type": "vertamedia-clickhouse-datasource", "uid": "clickhouse"},
+            "query": "SELECT countIf(status = 'success') * 100.0 / count(*) AS success_rate FROM payments.payment_events WHERE event_time >= now() - INTERVAL 5 MINUTE",
+            "format": "table"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "min": 0,
+            "max": 100,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"color": "red", "value": null},
+                {"color": "orange", "value": 95},
+                {"color": "green", "value": 98}
+              ]
+            },
+            "unit": "percent"
+          }
+        }
+      },
+      {
+        "id": 2,
+        "type": "timeseries",
+        "title": "Transaction Volume",
+        "gridPos": {"h": 8, "w": 12, "x": 6, "y": 0},
+        "targets": [
+          {
+            "datasource": {"type": "vertamedia-clickhouse-datasource", "uid": "clickhouse"},
+            "query": "SELECT toStartOfMinute(event_time) AS minute, count(*) AS txn_count FROM payments.payment_events WHERE event_time >= now() - INTERVAL 1 HOUR GROUP BY minute ORDER BY minute ASC",
+            "format": "time_series",
+            "timeColumn": "minute",
+            "valueColumn": "txn_count"
+          }
+        ]
+      },
+      {
+        "id": 3,
+        "type": "stat",
+        "title": "Total Transactions (24h)",
+        "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0},
+        "targets": [
+          {
+            "datasource": {"type": "vertamedia-clickhouse-datasource", "uid": "clickhouse"},
+            "query": "SELECT count(*) FROM payments.payment_events WHERE event_time >= now() - INTERVAL 24 HOUR",
+            "format": "table"
+          }
+        ]
+      },
+      {
+        "id": 4,
+        "type": "stat",
+        "title": "Total GMV (24h)",
+        "gridPos": {"h": 4, "w": 6, "x": 18, "y": 4},
+        "targets": [
+          {
+            "datasource": {"type": "vertamedia-clickhouse-datasource", "uid": "clickhouse"},
+            "query": "SELECT sum(amount) / 1000000 AS gmv_millions FROM payments.payment_events WHERE event_time >= now() - INTERVAL 24 HOUR",
+            "format": "table"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "currencyUSD"
+          }
+        }
+      },
+      {
+        "id": 5,
+        "type": "barchart",
+        "title": "P95 Latency by Gateway (ms)",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+        "targets": [
+          {
+            "datasource": {"type": "vertamedia-clickhouse-datasource", "uid": "clickhouse"},
+            "query": "SELECT gateway, quantile(0.95)(latency_ms) AS p95_latency FROM payments.payment_events WHERE event_time >= now() - INTERVAL 30 MINUTE GROUP BY gateway ORDER BY p95_latency DESC",
+            "format": "table"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"color": "green", "value": null},
+                {"color": "yellow", "value": 300},
+                {"color": "red", "value": 500}
+              ]
+            },
+            "unit": "ms"
+          }
+        },
+        "options": {
+          "orientation": "horizontal",
+          "barWidth": 0.7
+        }
+      },
+      {
+        "id": 6,
+        "type": "heatmap",
+        "title": "Failure Heatmap: Error Code × Gateway",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+        "targets": [
+          {
+            "datasource": {"type": "vertamedia-clickhouse-datasource", "uid": "clickhouse"},
+            "query": "SELECT error_code, gateway, count(*) AS error_count FROM payments.payment_events WHERE status != 'success' AND event_time >= now() - INTERVAL 1 HOUR GROUP BY error_code, gateway ORDER BY error_count DESC",
+            "format": "table"
+          }
+        ]
+      },
+      {
+        "id": 7,
+        "type": "timeseries",
+        "title": "Success Rate Trend by Gateway",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+        "targets": [
+          {
+            "datasource": {"type": "vertamedia-clickhouse-datasource", "uid": "clickhouse"},
+            "query": "SELECT toStartOfMinute(event_time) AS minute, gateway, countIf(status = 'success') * 100.0 / count(*) AS success_rate FROM payments.payment_events WHERE event_time >= now() - INTERVAL 2 HOUR GROUP BY minute, gateway ORDER BY minute ASC",
+            "format": "time_series",
+            "timeColumn": "minute",
+            "valueColumn": "success_rate",
+            "seriesColumn": "gateway"
+          }
+        ]
+      },
+      {
+        "id": 8,
+        "type": "table",
+        "title": "Gateway Health Summary",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+        "targets": [
+          {
+            "datasource": {"type": "vertamedia-clickhouse-datasource", "uid": "clickhouse"},
+            "query": "SELECT gateway, count(*) AS total_txn, countIf(status = 'success') * 100.0 / count(*) AS success_rate, quantile(0.50)(latency_ms) AS p50_latency, quantile(0.95)(latency_ms) AS p95_latency, quantile(0.99)(latency_ms) AS p99_latency FROM payments.payment_events WHERE event_time >= now() - INTERVAL 30 MINUTE GROUP BY gateway ORDER BY success_rate ASC",
+            "format": "table"
+          }
+        ],
+        "columnStyles": [
+          {
+            "pattern": "success_rate",
+            "type": "number",
+            "decimals": 2,
+            "suffix": "%"
+          },
+          {
+            "pattern": "p*_latency",
+            "type": "number",
+            "suffix": " ms"
+          }
+        ]
+      }
+    ],
+    "time": {"from": "now-1h", "to": "now"},
+    "timepicker": {
+      "refresh_intervals": ["5s", "10s", "30s", "1m", "5m", "15m", "30m", "1h"]
+    }
+  }
+}

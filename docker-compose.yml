@@ -1,0 +1,158 @@
+version: '3.8'
+
+services:
+  # Apache Kafka with Zookeeper
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    networks:
+      - payment-net
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_NUM_PARTITIONS: 3
+    networks:
+      - payment-net
+
+  # ClickHouse for time-series storage
+  clickhouse:
+    image: clickhouse/clickhouse-server:23.8
+    container_name: clickhouse
+    ports:
+      - "8123:8123"  # HTTP interface
+      - "9000:9000"  # Native interface
+    volumes:
+      - ./clickhouse/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+      - clickhouse_data:/var/lib/clickhouse
+    environment:
+      CLICKHOUSE_DB: payments
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: ""
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    networks:
+      - payment-net
+
+  # Prometheus for metrics
+  prometheus:
+    image: prom/prometheus:v2.47.0
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=15d'
+    networks:
+      - payment-net
+
+  # Grafana for dashboards
+  grafana:
+    image: grafana/grafana:10.1.0
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - ./grafana/dashboards:/var/lib/grafana/dashboards
+      - grafana_data:/var/lib/grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin123
+      GF_INSTALL_PLUGINS: grafana-clock-panel,grafana-piechart-panel
+    depends_on:
+      - prometheus
+      - clickhouse
+    networks:
+      - payment-net
+
+  # Synthetic data generator
+  synthetic-generator:
+    build:
+      context: .
+      dockerfile: Dockerfile.generator
+    container_name: synthetic-generator
+    ports:
+      - "8080:8080"
+    environment:
+      KAFKA_BROKERS: kafka:29092
+      LOG_LEVEL: info
+    depends_on:
+      - kafka
+    networks:
+      - payment-net
+
+  # Stream processor
+  stream-processor:
+    build:
+      context: .
+      dockerfile: Dockerfile.processor
+    container_name: stream-processor
+    environment:
+      KAFKA_BROKERS: kafka:29092
+      KAFKA_CONSUMER_GROUP: payment-processor-group
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PORT: 8123
+      CLICKHOUSE_DATABASE: payments
+      LOG_LEVEL: info
+    depends_on:
+      - kafka
+      - clickhouse
+    networks:
+      - payment-net
+
+  # Anomaly detector & Alerter
+  anomaly-detector:
+    build:
+      context: .
+      dockerfile: Dockerfile.detector
+    container_name: anomaly-detector
+    ports:
+      - "8081:8080"
+    environment:
+      KAFKA_BROKERS: kafka:29092
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PORT: 8123
+      SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
+      PAGERDUTY_KEY: ${PAGERDUTY_KEY:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_PROVIDER: ${LLM_PROVIDER:-claude}
+    depends_on:
+      - kafka
+      - clickhouse
+    networks:
+      - payment-net
+
+networks:
+  payment-net:
+    driver: bridge
+
+volumes:
+  clickhouse_data:
+  prometheus_data:
+  grafana_data:

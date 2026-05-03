@@ -1,0 +1,94 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: synthetic-generator
+  namespace: payment-monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: synthetic-generator
+  template:
+    metadata:
+      labels:
+        app: synthetic-generator
+    spec:
+      containers:
+      - name: generator
+        image: payment-monitoring/generator:latest
+        ports:
+        - containerPort: 8080
+        envFrom:
+        - configMapRef:
+            name: payment-monitoring-config
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "512Mi"
+          limits:
+            cpu: "1000m"
+            memory: "1Gi"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: stream-processor
+  namespace: payment-monitoring
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: stream-processor
+  template:
+    metadata:
+      labels:
+        app: stream-processor
+    spec:
+      containers:
+      - name: processor
+        image: payment-monitoring/processor:latest
+        ports:
+        - containerPort: 8080
+        envFrom:
+        - configMapRef:
+            name: payment-monitoring-config
+        resources:
+          requests:
+            cpu: "1000m"
+            memory: "1Gi"
+          limits:
+            cpu: "2000m"
+            memory: "2Gi"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: anomaly-detector
+  namespace: payment-monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: anomaly-detector
+  template:
+    metadata:
+      labels:
+        app: anomaly-detector
+    spec:
+      containers:
+      - name: detector
+        image: payment-monitoring/detector:latest
+        ports:
+        - containerPort: 8080
+        envFrom:
+        - configMapRef:
+            name: payment-monitoring-config
+        - secretRef:
+            name: payment-monitoring-secrets
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "512Mi"
+          limits:
+            cpu: "1000m"
+            memory: "1Gi"
