@@ -1,0 +1,53 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: synthetic-generator
+  namespace: payment-monitoring
+spec:
+  selector:
+    app: synthetic-generator
+  ports:
+  - port: 80
+    targetPort: 8080
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: anomaly-detector
+  namespace: payment-monitoring
+spec:
+  selector:
+    app: anomaly-detector
+  ports:
+  - port: 80
+    targetPort: 8080
+  type: ClusterIP
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: payment-monitoring-ingress
+  namespace: payment-monitoring
+spec:
+  rules:
+  - host: generator.payment-monitoring.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: synthetic-generator
+            port:
+              number: 80
+  - host: detector.payment-monitoring.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: anomaly-detector
+            port:
+              number: 80
